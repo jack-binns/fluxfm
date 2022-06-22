@@ -31,7 +31,6 @@ def sorted_nicely(ls):
 
 def trim_to_qlims(qlimits, profile):
     # print(f'qlimits {qlimits}')
-    snipped_int = []
     snipped_q = []
     for qpoint in profile:
         if qlimits[0] < qpoint[0] < qlimits[1]:
@@ -263,7 +262,7 @@ class XfmHfiveDataset:
         plt.imshow(inspec)
         plt.clim(cmin, cmax)
         plt.figure()
-        profile = self.frm_integration(image)
+        profile = self.frm_integration(image, npt=2250)
         plt.plot(np.log10(profile))
         tth_rpro = RedPro(profile, 1024)
         proc_arr = tth_rpro.proc2tth(self.pix_size, self.cam_length, self.wavelength)
@@ -344,19 +343,7 @@ class XfmHfiveDataset:
         print('<atomize_h5> ...complete')
         print(f'<atomize_h5> File manifest written to {atom_path}{self.tag}_manifest.txt')
 
-    # def frm_integration(self, frame):
-    #    """
-    #    integrate and reduce to 1d plots
-    #    """
-    #   frame_polar = warp_polar(np.transpose(frame), center = self.image_center, radius = 1024)
-    #   #plt.figure()
-    #    #plt.imshow(frame_polar)
-    #    #plt.show()
-    #    integrated_frame_polar = np.sum(frame_polar, axis=0)
-    #    return integrated_frame_polar
-
-    def frm_integration(self, frame, unit="q_nm^-1"):
-        # unit="q_nm^-1"
+    def frm_integration(self, frame, unit="q_nm^-1", npt=2250):
 
         ai = AzimuthalIntegrator()
         ai.setFit2D(directDist=self.cam_length,
@@ -365,17 +352,17 @@ class XfmHfiveDataset:
                     pixelX=self.pix_size,
                     pixelY=self.pix_size)
         ai.wavelength = self.wavelength / 1e10
-        integrated_profile = ai.integrate1d(data=frame, npt=2250, unit=unit)
+        integrated_profile = ai.integrate1d(data=frame, npt=npt, unit=unit)
         print(np.array(integrated_profile).shape)
         return np.transpose(np.array(integrated_profile))
 
     def normalize_frame(self, img, norm_range):
-        uw_img = self.frm_integration(img)
+        uw_img = self.frm_integration(img, npt=2250)
         # plt.plot(uw_img)
         norm_base = np.sum(uw_img[norm_range[0]:norm_range[1]])
         print(f'<normalize_frame> {norm_base}')
         norm_img = img / norm_base
-        uw_norm = self.frm_integration(norm_img)
+        uw_norm = self.frm_integration(norm_img, npt=2250)
         # plt.plot(uw_norm)
         # plt.show()
         return norm_img
@@ -652,69 +639,16 @@ class XfmHfiveDataset:
     def mem_run_sum(self, run_limit, show=False, dump=False):
         sum_data = np.sum(self.run_data_array, 0)
         print(f'dsum.size = {sum_data.size}')
-        if dump:
-            print('<mem_run_sum> Writing sum to:', self.scratch + self.tag + '_sum.npy')
-            np.save(self.scratch + self.tag + '_sum.npy', sum_data)
-            print('<mem_run_sum> Writing sum to:', self.scratch + self.tag + '_sum.dbin')
-            self.write_dbin(self.scratch + self.tag + '_sum.dbin', sum_data)
         self.run_data_sum = sum_data
-        profile = self.frm_integration(self.run_data_sum * self.mask)
-        rpro = RedPro(profile, 1024)
-        proc_arr_q = rpro.proc2q(self.pix_size, self.cam_length, self.wavelength)
-        target = f'{self.apath}{self.tag}_sum_reduced_q.dat'
-        # print(proc_arr[100])
-        np.savetxt(target, proc_arr_q)
-        proc_arr_s = rpro.proc2s(self.pix_size, self.cam_length, self.wavelength)
-        target = f'{self.apath}{self.tag}_sum_reduced_s'
-        np.save(target, proc_arr_s)
-        proc_arr_tth = rpro.proc2tth(self.pix_size, self.cam_length, self.wavelength)
-        target = f'{self.apath}{self.tag}_sum_reduced_tth'
-        np.save(target, proc_arr_tth)
-        if show:
-            plt.figure()
-            plt.title(f'{self.tag}_sum * mask')
-            plt.imshow(self.run_data_sum * self.mask)
-            plt.figure()
-            plt.title(f'{self.tag}_reduced_s')
-            plt.plot(proc_arr_s[:, 0], proc_arr_s[:, 1])
-            plt.show()
         return sum_data
 
     def mem_run_avg(self, run_limit, show=False, dump=False):
         avg_data = np.average(self.run_data_array, axis=0)
         print(f'avg_data.size = {avg_data.size}')
-        if dump:
-            print('<mem_run_avg> Writing avg to:', self.scratch + self.tag + '_avg.npy')
-            np.save(self.scratch + self.tag + '_avg.npy', avg_data)
-            # print('<mem_run_avg> Writing sum to:',self.scratch+self.tag + '_sum.dbin')
-            # self.write_dbin(self.scratch+self.tag + '_sum.dbin', sum_data)
         self.run_data_avg = avg_data
-        profile = self.frm_integration(self.run_data_avg * self.mask)
-        rpro = RedPro(profile, 1024)
-        proc_arr_q = rpro.proc2q(self.pix_size, self.cam_length, self.wavelength)
-        target = f'{self.apath}{self.tag}_avg_reduced_q'
-        # print(proc_arr[100])
-        np.save(target, proc_arr_q)
-        np.savetxt(target, proc_arr_q)
-        proc_arr_s = rpro.proc2s(self.pix_size, self.cam_length, self.wavelength)
-        target = f'{self.apath}{self.tag}_avg_reduced_s'
-        np.save(target, proc_arr_s)
-        np.savetxt(target, proc_arr_s)
-        proc_arr_tth = rpro.proc2tth(self.pix_size, self.cam_length, self.wavelength)
-        target = f'{self.apath}{self.tag}_avg_reduced_tth'
-        np.save(target, proc_arr_tth)
-        np.savetxt(target, proc_arr_tth)
-        if show:
-            plt.figure()
-            plt.title(f'{self.tag}_avg * mask')
-            plt.imshow(self.run_data_avg * self.mask)
-            plt.figure()
-            plt.title(f'{self.tag}_reduced_s')
-            plt.plot(proc_arr_s[:, 0], proc_arr_s[:, 1])
-            plt.show()
         return avg_data
 
-    def quick_overview(self, run_limit=0):
+    def quick_overview(self, run_limit=0, show=False):
         print(f'<fluxfm.overview> Analyzing run {self.tag}')
         self.tag_int_wt = []
         for k, h5 in enumerate(self.h5ls[:run_limit]):
@@ -725,20 +659,32 @@ class XfmHfiveDataset:
                 if k == 0:
                     self.run_data_array = d
                     self.mask = self.gen_mask(d[0], max_lim=self.max_lim)
-                    print(f'<fluxfm.overview> {self.mask.shape=}')
+                    print(f'<fluxfm.overview> {self.mask.shape}')
                 else:
                     self.run_data_array = np.concatenate((self.run_data_array, d), axis=0)
                 h5_sum = np.sum(d, axis=0)
-                np.savetxt(f'{self.apath}{self.tag}_sum_h5_{k + 1}_red.dat', self.frm_integration(h5_sum * self.mask))
-                np.save(f'{self.apath}{self.tag}_sum_h5_{k + 1}_red.npy', self.frm_integration(h5_sum * self.mask))
+                np.savetxt(f'{self.apath}{self.tag}_sum_h5_{k + 1}_red.dat',
+                           self.frm_integration(h5_sum * self.mask, npt=2250))
+                np.save(f'{self.apath}{self.tag}_sum_h5_{k + 1}_red.npy',
+                        self.frm_integration(h5_sum * self.mask, npt=2250))
                 print(f'<fluxfm.quick_overview> {h5} shape:  {d.shape}')
-                print(f'<fluxfm.quick_overview> {self.run_data_array.shape=}')
-        self.dsum = self.mem_run_sum(run_limit, dump=True, show=True)
-        self.run_data_avg = self.mem_run_avg(run_limit, show=True, dump=True)
-        print(f'<fluxfm.quick_overview> Writing overview sum to:{self.scratch}{self.tag}_sum.npy')
+                print(f'<fluxfm.quick_overview> {self.run_data_array.shape}')
+        self.dsum = self.mem_run_sum(run_limit, dump=True, show=False)
+        self.run_data_avg = self.mem_run_avg(run_limit, dump=True, show=False)
+        print(f'<fluxfm.quick_overview> Writing overview sum to:{self.scratch}{self.tag}_sum_reduced_q.npy')
         np.save(self.scratch + self.tag + '_sum.npy', self.dsum)
-        print(f'<fluxfm.quick_overview> Writing overview mean to:{self.scratch}{self.tag}_avg.npy')
+        print(f'<fluxfm.quick_overview> Writing overview mean to:{self.scratch}{self.tag}_avg_reduced_q.npy')
         np.save(self.scratch + self.tag + '_avg.npy', self.run_data_avg)
+        print(f'median dsum {np.median(self.dsum)}')
+        print(f'media avg {np.median(self.run_data_avg)}')
+        if show:
+            plt.figure(f'{self.tag} Masked sum')
+            plt.imshow(self.dsum * self.mask)
+            plt.clim(0, np.median(self.dsum) * 3)
+            plt.figure(f'{self.tag} Masked average')
+            plt.imshow(self.run_data_avg * self.mask)
+            plt.clim(0.0, np.median(self.run_data_avg) * 3)
+            plt.show()
 
     def run_movie(self, run_id=0, step=100, cmin=0, cmax=1000):
         print(self.h5ls[0])

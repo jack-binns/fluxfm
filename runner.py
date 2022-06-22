@@ -14,13 +14,12 @@ if __name__ == '__main__':
     dset.wavelength = constants_config.wavelength
     dset.pix_size = constants_config.pix_size
     dset.max_lim = constants_config.MAX_PX_COUNT
-    dset.dpath = f'{constants_config.beamtime_data_path}{dset.group}/{dset.tag}/'
-    dset.apath = f'{constants_config.beamtime_analysis_path}{dset.group}/{dset.tag}/'
+
 
 
     # Here you select the group and run for the data set
-    dset.group = 'DLC'
-    run_num = 48
+    dset.group = 'ctab50h2o50'
+    run_num = 216
 
     image_center = (514.425, 530.777)
 
@@ -48,14 +47,16 @@ if __name__ == '__main__':
     dset.bboxes = bboxes
     dset.circs = circs
     dset.image_center = image_center
+    dset.dpath = f'{constants_config.beamtime_data_path}{dset.group}/{dset.tag}/'
+    dset.apath = f'{constants_config.beamtime_analysis_path}{dset.group}/{dset.tag}/'
     dset.grab_dset_members()
     dset.mk_scratch('')
 
     """
     Here we run fluxfm commands
     """
-    dset.quick_overview(run_limit=1)  # set to 1 to examine just the first run, quickest method
-
+    dset.quick_overview(run_limit=1, show=True)  # set to 1 to examine just the first run, quickest method
+	
 
 
         #

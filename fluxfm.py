@@ -290,35 +290,33 @@ class XfmHfiveDataset:
         self.run_data_sum = sum_data
         return sum_data
 
-    def atomize_h5(self, folder, start=0, limit=10, masked=False, normalize=False, norm_range=[0, 10]):
+    def atomize_h5(self, folder='h5_frames', start=0, limit=10, masked=False):
         """
-        Each h5 file in self.h5ls is separated out into 1000 dbin files in 
+        Each h5 file in self.h5ls is separated out into 1000 npy files in
         self.tag/h5_frames/
         A manifest .txt file is written out for reading by p3padf
         :param limit: int setting the number of member .h5 files in the self.tag to expand
         :
         """
-        atom_path = self.scratch + folder + '/'
+        atom_path = f'{self.apath}{folder}/'
         if not os.path.exists(atom_path):
             os.makedirs(atom_path)
         print(f'<atomize_h5> Atomizing to {atom_path}')
-        with open(atom_path + self.tag + '_manifest.txt', 'w') as f:
+        self.mask = np.load(f'{self.apath}{self.tag}_mask.npy')
+        with open(f'{atom_path}{self.tag}_manifest.txt', 'w') as f:
             for k, h5 in enumerate(sorted_nicely(self.h5ls[start:limit])):
                 print(f'<atomize_h5> Atomizing {h5}...')
                 with h5py.File(self.dpath + h5) as h:
                     d = np.array(h['entry/data/data'])
                     for shot in range(d.shape[0]):
-                        target = f'{atom_path}{self.tag}_{k}_{shot}.dbin'
                         if shot % 100 == 0:
                             print(f'<atomize_h5> {shot}/{d.shape[0]} frames generated')
                         if masked:
                             frame = d[shot, :, :] * self.mask
                         else:
                             frame = d[shot, :, :]
-                        if normalize:
-                            frame = self.normalize_frame(frame, norm_range)
-                        self.write_dbin(target, frame)
-                        f.write(f'{atom_path}{self.tag}_{k}_{shot}.dbin' + '\n')
+                        np.save(f'{atom_path}{self.tag}_{k}_{shot}.npy', frame)
+                        f.write(f'{atom_path}{self.tag}_{k}_{shot}.npy\n')
         print('<atomize_h5> ...complete')
         print(f'<atomize_h5> File manifest written to {atom_path}{self.tag}_manifest.txt')
 
@@ -634,15 +632,25 @@ class XfmHfiveDataset:
         self.red_data_sum = np.load(f'{self.apath}{self.tag}_sum_red.npy')
         self.red_data_avg = np.load(f'{self.apath}{self.tag}_avg_red.npy')
         print(f'Plotting overview for {self.tag}')
+        # Images
         plt.figure(f'{self.tag} Masked sum')
+        plt.title(f'{self.tag} Masked sum')
         plt.imshow(self.run_data_sum * self.mask)
         plt.clim(0, np.median(self.run_data_sum) * 3)
         plt.figure(f'{self.tag} Masked average')
+        plt.title(f'{self.tag} Masked average')
         plt.imshow(self.run_data_avg * self.mask)
         plt.clim(0.0, np.median(self.run_data_avg) * 3)
+        # Reduced data
         plt.figure(f'{self.tag} Reduced masked sum')
+        plt.title(f'{self.tag} Reduced masked sum')
+        plt.xlabel('q / nm^{-1}')
+        plt.ylabel('Intensity / arb. units')
         plt.plot(self.red_data_sum[:, 0], self.red_data_sum[:, 1])
         plt.figure(f'{self.tag} Reduced masked avg')
+        plt.title(f'{self.tag} Reduced masked avg')
+        plt.xlabel('q / nm^{-1}')
+        plt.ylabel('Intensity / arb. units')
         plt.plot(self.red_data_avg[:, 0], self.red_data_avg[:, 1])
         plt.show()
 

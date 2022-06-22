@@ -32,6 +32,7 @@ def sorted_nicely(ls):
 def trim_to_qlims(qlimits, profile):
     # print(f'qlimits {qlimits}')
     snipped_q = []
+    snipped_int = []
     for qpoint in profile:
         if qlimits[0] < qpoint[0] < qlimits[1]:
             snipped_q.append(qpoint[0])
@@ -92,30 +93,6 @@ class RedPro:
         #	plt.show()
         return rfac
 
-    def proc2s(self, pix_size, cam_length, wavelength):
-        for i, pix in enumerate(self.sar):
-            a = np.arctan((i * pix_size) / cam_length)
-            s = (2 / wavelength) * np.sin(a / 2)
-            self.sar[i] = s
-        joint_array = np.column_stack((self.sar, self.data))
-        return joint_array
-
-    def proc2q(self, pix_size, cam_length, wavelength):
-        for i, pix in enumerate(self.sar):
-            a = np.arctan((i * pix_size) / cam_length)
-            q = ((4 * np.pi) / wavelength) * np.sin(a / 2)
-            s = (2 / wavelength) * np.sin(a / 2)
-            self.qar[i] = q * 1E-10
-        joint_array = np.column_stack((self.qar, self.data))
-        return joint_array
-
-    def proc2tth(self, pix_size, cam_length, wavelength):
-        for i, pix in enumerate(self.sar):
-            a = np.arctan((i * pix_size) / cam_length)
-            self.tthar[i] = np.degrees(a)
-        joint_array = np.column_stack((self.tthar, self.data))
-        return joint_array
-
 
 class XfmHfiveDataset:
 
@@ -147,7 +124,9 @@ class XfmHfiveDataset:
         self.frm_indexes = []
         self.run_data_array = []
         self.run_data_sum = []
+        self.red_data_sum = None
         self.run_data_avg = []
+        self.red_data_avg = None
 
     def grab_dset_members(self):
         print('<grab_dset_members> Grabbing .h5 list...')
@@ -648,8 +627,24 @@ class XfmHfiveDataset:
         self.run_data_avg = avg_data
         return avg_data
 
-    def show_overview(self):
-
+    def show_overview_figures(self):
+        self.mask = np.load(f'{self.apath}{self.tag}_mask.npy')
+        self.run_data_avg = np.load(f'{self.apath}{self.tag}_avg.npy')
+        self.run_data_sum = np.load(f'{self.apath}{self.tag}_sum.npy')
+        self.red_data_sum = np.load(f'{self.apath}{self.tag}_sum_red.npy')
+        self.red_data_avg = np.load(f'{self.apath}{self.tag}_avg_red.npy')
+        print(f'Plotting overview for {self.tag}')
+        plt.figure(f'{self.tag} Masked sum')
+        plt.imshow(self.run_data_sum * self.mask)
+        plt.clim(0, np.median(self.run_data_sum) * 3)
+        plt.figure(f'{self.tag} Masked average')
+        plt.imshow(self.run_data_avg * self.mask)
+        plt.clim(0.0, np.median(self.run_data_avg) * 3)
+        plt.figure(f'{self.tag} Reduced masked sum')
+        plt.plot(self.red_data_sum[:, 0], self.red_data_sum[:, 1])
+        plt.figure(f'{self.tag} Reduced masked avg')
+        plt.plot(self.red_data_avg[:, 0], self.red_data_avg[:, 1])
+        plt.show()
 
     def quick_overview(self, run_limit=0, show=False):
         print(f'<fluxfm.overview> Analyzing run {self.tag}')

@@ -134,7 +134,7 @@ class XfmHfiveDataset:
         self.max_lim = 4.29E9
         self.image_center = (0, 0)
         self.h5ls = []
-        self.dsum = []
+        self.run_data_sum = []
         self.mask = []
         self.bboxes = []
         self.circs = []
@@ -308,7 +308,7 @@ class XfmHfiveDataset:
             np.save(self.scratch + self.tag + '_sum.npy', sum_data)
             print('<sum_h5s> Writing sum to:', self.scratch + self.tag + '_sum.dbin')
             self.write_dbin(self.scratch + self.tag + '_sum.dbin', sum_data)
-        self.dsum = sum_data
+        self.run_data_sum = sum_data
         return sum_data
 
     def atomize_h5(self, folder, start=0, limit=10, masked=False, normalize=False, norm_range=[0, 10]):
@@ -636,17 +636,20 @@ class XfmHfiveDataset:
         self.frm_indexes = np.delete(self.frm_indexes, np.where(self.tag_int_wt[:, 1] < threshold))
         print(len(self.frm_indexes))
 
-    def mem_run_sum(self, run_limit, show=False, dump=False):
+    def mem_run_sum(self):
         sum_data = np.sum(self.run_data_array, 0)
         print(f'dsum.size = {sum_data.size}')
         self.run_data_sum = sum_data
         return sum_data
 
-    def mem_run_avg(self, run_limit, show=False, dump=False):
+    def mem_run_avg(self):
         avg_data = np.average(self.run_data_array, axis=0)
         print(f'avg_data.size = {avg_data.size}')
         self.run_data_avg = avg_data
         return avg_data
+
+    def show_overview(self):
+
 
     def quick_overview(self, run_limit=0, show=False):
         print(f'<fluxfm.overview> Analyzing run {self.tag}')
@@ -669,18 +672,20 @@ class XfmHfiveDataset:
                         self.frm_integration(h5_sum * self.mask, npt=2250))
                 print(f'<fluxfm.quick_overview> {h5} shape:  {d.shape}')
                 print(f'<fluxfm.quick_overview> {self.run_data_array.shape}')
-        self.dsum = self.mem_run_sum(run_limit, dump=True, show=False)
-        self.run_data_avg = self.mem_run_avg(run_limit, dump=True, show=False)
+        self.run_data_sum = self.mem_run_sum()
+        self.run_data_avg = self.mem_run_avg()
         print(f'<fluxfm.quick_overview> Writing overview sum to:{self.scratch}{self.tag}_sum_reduced_q.npy')
-        np.save(self.scratch + self.tag + '_sum.npy', self.dsum)
+        np.save(self.scratch + self.tag + '_sum.npy', self.run_data_sum)
+        np.save(f'{self.apath}{self.tag}_sum_red.npy', self.frm_integration(self.run_data_sum * self.mask, npt=2250))
         print(f'<fluxfm.quick_overview> Writing overview mean to:{self.scratch}{self.tag}_avg_reduced_q.npy')
         np.save(self.scratch + self.tag + '_avg.npy', self.run_data_avg)
-        print(f'median dsum {np.median(self.dsum)}')
+        np.save(f'{self.apath}{self.tag}_avg_red.npy', self.frm_integration(self.run_data_avg * self.mask, npt=2250))
+        print(f'median dsum {np.median(self.run_data_sum)}')
         print(f'media avg {np.median(self.run_data_avg)}')
         if show:
             plt.figure(f'{self.tag} Masked sum')
-            plt.imshow(self.dsum * self.mask)
-            plt.clim(0, np.median(self.dsum) * 3)
+            plt.imshow(self.run_data_sum * self.mask)
+            plt.clim(0, np.median(self.run_data_sum) * 3)
             plt.figure(f'{self.tag} Masked average')
             plt.imshow(self.run_data_avg * self.mask)
             plt.clim(0.0, np.median(self.run_data_avg) * 3)

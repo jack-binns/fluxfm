@@ -147,33 +147,6 @@ class XfmHfiveDataset:
         print(f'scratch folder: {scr_path}')
         self.scratch = scr_path
 
-    def write_dbin(self, path, data):
-        """
-        Write a .dbin file to the specified path. Slower than using npy files
-        :param path: str to file location
-        :param data: array to be written
-        :return: nothing returned 
-        """
-        foal = open(path, "wb")
-        fmt = '<' + 'd' * data.size
-        bin_in = struct.pack(fmt, *data.flatten()[:])
-        foal.write(bin_in)
-        foal.close()
-
-    def read_dbin(self, path, swapbyteorder=0):
-        size = os.path.getsize(path)
-        print(size)
-        b = array.array('d')
-        fail = open(path, 'rb')
-        # print(fail)
-        b.fromfile(fail, size // 8)
-        fail.close()
-        lst = b.tolist()
-        output = np.array(lst).reshape(self.nx, self.ny)
-        if swapbyteorder == 1:
-            output = output.newbyteorder()
-        return output
-
     def gen_mask(self, image, max_lim, bboxes=False, circs=False, dump=True):
         print('<fluxfm.gen_mask> Generating mask...')
         self.mask = np.ones(image.shape)
@@ -262,66 +235,50 @@ class XfmHfiveDataset:
         # plt.axvline(x=pzero*np.sqrt(4))
         # plt.show()
 
-    def sum_h5s(self, limit=10, dump=False):
+    def atomize_reduce_h5(self, img_folder='h5_frames', profile_folder='1d_profiles', masked=True):
         """
-        Sums all h5 files in a run
-        :param limit: set to index at which sum will stop
-        :return: numpy array containing sum of all data in run
+        Each h5 in self.h5ls is separated into separated 2d images stored as npy arrays.
+        These images are also reduced (masked by default) for filtering
+        :param img_folder: location where 2d npy arrays are stored
+        :param profile_folder: locationw where 1d reduced arrays are stored
+        :return:
         """
-        # First check to see if the sum file has been generated before:
-        prior_sum_file = self.scratch + self.tag + '_sum.npy'
-        if os.path.isfile(prior_sum_file):
-            print('<sum_h5s> sum file already exists...continue?')
-            input('Press enter to continue...')
-        print('<sum_h5s> Summing all frames...')
-        sum_data = np.zeros((1062, 1028))
-        for h5 in self.h5ls[:limit]:
-            print('<sum_h5s> h5:', h5)
-            print('<sum_h5s> Reading:', self.dpath + h5)
-            with h5py.File(self.dpath + h5) as f:
-                d = np.array(f['entry/data/data'])
-                sum_data += np.sum(d, 0)
-            # print(f'dsum.size = {sum_data.size}')
-        if dump:
-            print('<sum_h5s> Writing sum to:', self.scratch + self.tag + '_sum.npy')
-            np.save(self.scratch + self.tag + '_sum.npy', sum_data)
-            print('<sum_h5s> Writing sum to:', self.scratch + self.tag + '_sum.dbin')
-            self.write_dbin(self.scratch + self.tag + '_sum.dbin', sum_data)
-        self.run_data_sum = sum_data
-        return sum_data
-
-    def atomize_h5(self, folder='h5_frames', start=0, limit=10, masked=False):
-        """
-        Each h5 file in self.h5ls is separated out into 1000 npy files in
-        self.tag/h5_frames/
-        A manifest .txt file is written out for reading by p3padf
-        :param limit: int setting the number of member .h5 files in the self.tag to expand
-        :
-        """
-        atom_path = f'{self.apath}{folder}/'
+        self.mask = np.load(f'{self.apath}{self.tag}_mask.npy')
+        atom_path = f'{self.apath}{img_folder}/'
+        red_path = f'{self.apath}{profile_folder}/'
         if not os.path.exists(atom_path):
             os.makedirs(atom_path)
-        print(f'<atomize_h5> Atomizing to {atom_path}')
-        self.mask = np.load(f'{self.apath}{self.tag}_mask.npy')
+        if not os.path.exists(red_path):
+            os.makedirs(red_path)
+        print(f'<atomize_reduce_h5> Atomizing to {atom_path}')
+        print(f'<atomize_reduce_h5> Reducing to {red_path}')
         with open(f'{atom_path}{self.tag}_manifest.txt', 'w') as f:
-            for k, h5 in enumerate(sorted_nicely(self.h5ls[start:limit])):
-                print(f'<atomize_h5> Atomizing {h5}...')
+            for k, h5 in enumerate(sorted_nicely(self.h5ls)):
+                print(f'<atomize_reduce_h5> Atomizing {h5}...')
                 with h5py.File(self.dpath + h5) as h:
                     d = np.array(h['entry/data/data'])
                     for shot in range(d.shape[0]):
                         if shot % 100 == 0:
-                            print(f'<atomize_h5> {shot}/{d.shape[0]} frames generated')
+                            print(f'<atomize_reduce_h5> {shot}/{d.shape[0]} frames generated')
                         if masked:
                             frame = d[shot, :, :] * self.mask
                         else:
                             frame = d[shot, :, :]
+                        profile = self.frm_integration(frame)
+                        np.save(f'{red_path}{self.tag}_{k}_{shot}_red.npy', profile)
                         np.save(f'{atom_path}{self.tag}_{k}_{shot}.npy', frame)
                         f.write(f'{atom_path}{self.tag}_{k}_{shot}.npy\n')
-        print('<atomize_h5> ...complete')
-        print(f'<atomize_h5> File manifest written to {atom_path}{self.tag}_manifest.txt')
+        print('<atomize_reduce_h5> ...complete')
+        print(f'<atomize_reduce_h5> File manifest written to {atom_path}{self.tag}_manifest.txt')
 
     def frm_integration(self, frame, unit="q_nm^-1", npt=2250):
-
+        """
+        Perform azimuthal integration of frame array
+        :param frame: numpy array containing 2D intensity
+        :param unit:
+        :param npt:
+        :return: two-col array of q & intensity.
+        """
         ai = AzimuthalIntegrator()
         ai.setFit2D(directDist=self.cam_length,
                     centerX=self.image_center[0],
@@ -332,94 +289,6 @@ class XfmHfiveDataset:
         integrated_profile = ai.integrate1d(data=frame, npt=npt, unit=unit)
         print(np.array(integrated_profile).shape)
         return np.transpose(np.array(integrated_profile))
-
-    def normalize_frame(self, img, norm_range):
-        uw_img = self.frm_integration(img, npt=2250)
-        # plt.plot(uw_img)
-        norm_base = np.sum(uw_img[norm_range[0]:norm_range[1]])
-        print(f'<normalize_frame> {norm_base}')
-        norm_img = img / norm_base
-        uw_norm = self.frm_integration(norm_img, npt=2250)
-        # plt.plot(uw_norm)
-        # plt.show()
-        return norm_img
-
-    def reduce_h5(self, folder='1d_profiles', start=0, limit=10, masked=False, scatter_mode='q', units='m'):
-        """
-
-        """
-        reduction_path = f'{self.scratch}{folder}/'
-        if not os.path.exists(reduction_path):
-            os.makedirs(reduction_path)
-        print(f'<reduce_h5> Reducing data to 1D profiles. Output to {reduction_path}')
-        print(f'<reduce_h5> Reduction mode :{scatter_mode}')
-        for k, h5 in enumerate(self.h5ls[start:limit]):
-            print(f'<reduce_h5> Reducing {h5}...')
-            with h5py.File(self.dpath + h5) as h:
-                d = np.array(h['entry/data/data'])
-                for n, shot in enumerate(range(d.shape[0])):
-                    frame = d[shot, :, :] * self.mask
-                    profile = self.frm_integration(frame)
-                    # rpro = RedPro(profile,1024)
-                    if scatter_mode == 'q':
-                        # proc_arr = rpro.proc2q(self.pix_size,self.cam_length,self.wavelength)
-                        target = f'{reduction_path}{self.tag}_{k}_{shot}_reduced_q_{units}.npy'
-                        # print(proc_arr[100])
-                        np.save(target, profile)
-                    if n % 100 == 0:
-                        print(f'{n} frames reduced')
-                    # elif scatter_mode == 's':
-                    #   proc_arr = rpro.proc2s(self.pix_size,self.cam_length,self.wavelength)
-                    #  target = f'{reduction_path}{self.tag}_{k}_{shot}_reduced_s'
-                    # np.save(target, proc_arr)
-                    # elif scatter_mode == 'tth':
-                    #   proc_arr = rpro.proc2tth(self.pix_size,self.cam_length,self.wavelength)
-                    #  target = f'{reduction_path}{self.tag}_{k}_{shot}_reduced_tth'
-                    # np.save(target, proc_arr)
-                    # plt.plot(proc_arr[:,0],proc_arr[:,1])
-                    # plt.show()
-
-    def reduce_dbin(self, folder='1d_profiles', dbin_folder='norm_h5_frames', masked=True, scatter_mode='q'):
-        """
-
-        """
-        reduction_path = f'{self.scratch}{folder}/'
-        ensemble_peak = []
-        ensemble_base = []
-        ensemble_pob = []
-        if not os.path.exists(reduction_path):
-            os.makedirs(reduction_path)
-        print(f'<reduce_dbin> Reducing data to 1D profiles. Output to {reduction_path}')
-        print(f'<reduce_dbin> Reduction mode :{scatter_mode}')
-        dbin_ls = sorted_nicely(glob.glob(f'{self.apath}{dbin_folder}/*.dbin'))
-        for k, db in enumerate(dbin_ls):
-            d = self.read_dbin(db)
-            frame = d * self.mask
-            profile = self.frm_integration(frame)
-            rpro = RedPro(profile, 1028)
-            if scatter_mode == 'q':
-                proc_arr = rpro.proc2q(self.pix_size, self.cam_length, self.wavelength)
-                target = f'{reduction_path}{self.tag}_{k}_reduced_q'
-                np.save(target, profile)
-                peak = np.sum(proc_arr[105:130, 1])
-                base = np.sum(proc_arr[400:425, 1])
-                print(f'{k} peak {peak} base {base}')
-                ensemble_peak.append(peak)
-                ensemble_base.append(base)
-                ensemble_pob.append(peak / base)
-                # plt.plot(proc_arr[:,1])
-                # plt.show()
-            elif scatter_mode == 's':
-                proc_arr = rpro.proc2s(self.pix_size, self.cam_length, self.wavelength)
-                target = f'{reduction_path}{self.tag}_{k}_reduced_s'
-                np.save(target, profile)
-        np.save(f'{reduction_path}{self.tag}_peak.npy', np.array(ensemble_peak))
-        np.save(f'{reduction_path}{self.tag}_base.npy', np.array(ensemble_base))
-        np.save(f'{reduction_path}{self.tag}_pob.npy', np.array(ensemble_pob))
-        plt.plot(ensemble_peak[:])
-        plt.plot(ensemble_base[:])
-        plt.plot(ensemble_pob[:])
-        plt.show()
 
     def scatter_shot_inspect(self, dbin_folder='h5_frames', sample_size=10, dump=False):
         dbin_ls = sorted_nicely(glob.glob(f'{self.apath}{dbin_folder}/*.dbin'))
@@ -613,18 +482,6 @@ class XfmHfiveDataset:
         self.frm_indexes = np.delete(self.frm_indexes, np.where(self.tag_int_wt[:, 1] < threshold))
         print(len(self.frm_indexes))
 
-    def mem_run_sum(self):
-        sum_data = np.sum(self.run_data_array, 0)
-        print(f'dsum.size = {sum_data.size}')
-        self.run_data_sum = sum_data
-        return sum_data
-
-    def mem_run_avg(self):
-        avg_data = np.average(self.run_data_array, axis=0)
-        print(f'avg_data.size = {avg_data.size}')
-        self.run_data_avg = avg_data
-        return avg_data
-
     def show_overview_figures(self):
         self.mask = np.load(f'{self.apath}{self.tag}_mask.npy')
         self.run_data_avg = np.load(f'{self.apath}{self.tag}_avg.npy')
@@ -675,8 +532,8 @@ class XfmHfiveDataset:
                         self.frm_integration(h5_sum * self.mask, npt=2250))
                 print(f'<fluxfm.quick_overview> {h5} shape:  {d.shape}')
                 print(f'<fluxfm.quick_overview> {self.run_data_array.shape}')
-        self.run_data_sum = self.mem_run_sum()
-        self.run_data_avg = self.mem_run_avg()
+        self.run_data_sum = np.sum(self.run_data_array, 0)
+        self.run_data_avg = np.average(self.run_data_array, axis=0)
         print(f'<fluxfm.quick_overview> Writing overview sum to:{self.scratch}{self.tag}_sum_reduced_q.npy')
         np.save(self.scratch + self.tag + '_sum.npy', self.run_data_sum)
         np.save(f'{self.apath}{self.tag}_sum_red.npy', self.frm_integration(self.run_data_sum * self.mask, npt=2250))

@@ -13,6 +13,7 @@ import re
 import random
 import scipy
 import numpy.ma as ma
+import configparser
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 
 
@@ -96,37 +97,67 @@ class RedPro:
 
 class XfmHfiveDataset:
 
-    def __init__(self):
+    def __init__(self, configpath=''):
 
-        self.root = ''
+        self.configpath = configpath
+
+        # Parameters passed from config file:
+        self.nx = 1062
+        self.ny = 1028
+        self.max_px_count = 4.29E9
+        self.cam_length = 1.0
+        self.wavelength = 1.0
+        self.pix_size = 1.0
+        self.experiment_id = ''
+        self.maia_num = 0
+
+        # Set in runner
         self.group = ''
         self.tag = ''
         self.dpath = ''
         self.apath = ''
         self.scratch = ''
         self.mfpath = ''
-        self.experiment_id = ''
-        self.nx = 1062
-        self.ny = 1028
-        self.max_lim = 4.29E9
         self.image_center = (0, 0)
+
+        # Internals
         self.h5ls = []
-        self.run_data_sum = []
+
         self.mask = []
         self.bboxes = []
         self.circs = []
-        self.pix_size = 1.0
-        self.cam_length = 1.0
-        self.wavelength = 1.0
-        self.average_profile = []
-        self.rfactor_array = []
-        self.tag_int_wt = []
-        self.frm_indexes = []
+
         self.run_data_array = []
         self.run_data_sum = []
         self.red_data_sum = None
         self.run_data_avg = []
         self.red_data_avg = None
+
+        self.average_profile = []
+        self.rfactor_array = []
+        self.tag_int_wt = []
+        self.frm_indexes = []
+
+        # Run initialization
+        self.parameter_pass()
+
+    def parameter_pass(self):
+        print(f'<fluxfm.parameter_pass> Initializing analysis module...')
+        conpar = configparser.RawConfigParser()
+        conpar.read(self.configpath)
+        param_dict = dict(conpar.items('FLUXFM_CONFIG'))
+        # print(param_dict.keys())
+        # print(param_dict.values())
+        self.nx = int(param_dict['eiger_nx'])
+        self.ny = int(param_dict['eiger_ny'])
+        self.max_px_count = float(param_dict['max_px_count'])
+        self.cam_length = float(param_dict['cam_length'])
+        self.wavelength = float(param_dict['wavelength'])
+        self.pix_size = float(param_dict['pix_size'])
+        self.experiment_id = str(param_dict['experiment_id'])
+        self.maia_num = int(param_dict['maia_num'])
+        self.dpath = str(param_dict['experiment_data_path'])
+        self.apath = str(param_dict['experiment_analysis_path'])
 
     def grab_dset_members(self):
         print('<grab_dset_members> Grabbing .h5 list...')
@@ -235,10 +266,11 @@ class XfmHfiveDataset:
         # plt.axvline(x=pzero*np.sqrt(4))
         # plt.show()
 
-    def atomize_reduce_h5(self, img_folder='h5_frames', profile_folder='1d_profiles', masked=True):
+    def atomize_reduce_h5(self, img_folder='h5_frames', profile_folder='1d_profiles', masked=False):
         """
         Each h5 in self.h5ls is separated into separated 2d images stored as npy arrays.
         These images are also reduced (masked by default) for filtering
+        :param masked: boolean, if True, mask the 2d image, reduced data is always masked
         :param img_folder: location where 2d npy arrays are stored
         :param profile_folder: locationw where 1d reduced arrays are stored
         :return:
@@ -264,7 +296,7 @@ class XfmHfiveDataset:
                             frame = d[shot, :, :] * self.mask
                         else:
                             frame = d[shot, :, :]
-                        profile = self.frm_integration(frame)
+                        profile = self.frm_integration(frame * self.mask)
                         np.save(f'{red_path}{self.tag}_{k}_{shot}_red.npy', profile)
                         np.save(f'{atom_path}{self.tag}_{k}_{shot}.npy', frame)
                         f.write(f'{atom_path}{self.tag}_{k}_{shot}.npy\n')
@@ -287,7 +319,7 @@ class XfmHfiveDataset:
                     pixelY=self.pix_size)
         ai.wavelength = self.wavelength / 1e10
         integrated_profile = ai.integrate1d(data=frame, npt=npt, unit=unit)
-        print(np.array(integrated_profile).shape)
+        # print(np.array(integrated_profile).shape)
         return np.transpose(np.array(integrated_profile))
 
     def scatter_shot_inspect(self, dbin_folder='h5_frames', sample_size=10, dump=False):
@@ -474,7 +506,7 @@ class XfmHfiveDataset:
         self.make_filtered_manifest(filtered_indices, frm_list, line_list, mf_path, odd_mf_path, even_mf_path)
 
     def quick_mask(self, frame):
-        mfrm = ma.masked_where(frame > self.max_lim, frame)
+        mfrm = ma.masked_where(frame > self.max_px_count, frame)
         return mfrm
 
     def quick_int_filter(self, threshold):
@@ -521,7 +553,7 @@ class XfmHfiveDataset:
                 d = np.array(f['entry/data/data'])
                 if k == 0:
                     self.run_data_array = d
-                    self.mask = self.gen_mask(d[0], max_lim=self.max_lim)
+                    self.mask = self.gen_mask(d[0], max_lim=self.max_px_count)
                     print(f'<fluxfm.overview> {self.mask.shape}')
                 else:
                     self.run_data_array = np.concatenate((self.run_data_array, d), axis=0)

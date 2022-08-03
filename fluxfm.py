@@ -502,11 +502,13 @@ class XfmHfiveDataset:
         """
         plt.figure()
         plt.plot(self.rfactor_array[:])
+        plt.ylabel('R-factor')
+        plt.xlabel('Frame number')
         plt.show()
         plt.figure()
         plt.ylabel('Counts')
-        plt.xlabel('R factor')
-        plt.hist(self.rfactor_array, bins=20, range=(0.0, 0.1))
+        plt.xlabel('R-factor')
+        plt.hist(self.rfactor_array, bins=20, range=(0.0, rfac_threshold*1.1))
         plt.show()
         print(f'<fluxfm.filter_against_average> filtering with limit <= {rfac_threshold}')
         print(f'<fluxfm.filter_against_average> filtering total of {len(self.rfactor_array)} profiles')
@@ -521,7 +523,7 @@ class XfmHfiveDataset:
                     plt.plot(subset_ap[:, 0], subset_ap[:, 1])
                     plt.show()
         print(f'<filter_against_average> a total of {len(filtered_indices)} profles < {rfac_threshold}')
-        self.make_filtered_manifest(filtered_indices, frm_list, line_list, mf_path, odd_mf_path, even_mf_path)
+        self.make_filtered_manifest(filtered_indices, line_list, mf_path, odd_mf_path, even_mf_path)
 
     def quick_mask(self, frame):
         mfrm = ma.masked_where(frame > self.max_px_count, frame)

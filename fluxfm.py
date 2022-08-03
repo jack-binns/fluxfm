@@ -1,5 +1,6 @@
 import h5py
 import numpy as np
+import time
 import os
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -146,8 +147,6 @@ class XfmHfiveDataset:
         conpar = configparser.RawConfigParser()
         conpar.read(self.configpath)
         param_dict = dict(conpar.items('FLUXFM_CONFIG'))
-        # print(param_dict.keys())
-        # print(param_dict.values())
         self.nx = int(param_dict['eiger_nx'])
         self.ny = int(param_dict['eiger_ny'])
         self.max_px_count = float(param_dict['max_px_count'])
@@ -181,8 +180,6 @@ class XfmHfiveDataset:
     def gen_mask(self, image, max_lim, bboxes=False, circs=False, dump=True):
         print('<fluxfm.gen_mask> Generating mask...')
         self.mask = np.ones(image.shape)
-        # print(f'<gen_mask>{self.mask.shape}')
-        # print(f'<gen_mask>{self.dsum.shape}')
         for index, pix in np.ndenumerate(image):
             if pix > max_lim:
                 nx = index[0]
@@ -201,7 +198,6 @@ class XfmHfiveDataset:
             print(f'<fluxfm.gen_mask>  mask shape  {self.mask.shape}')
             for idx, pixel in np.ndenumerate(image):
                 excluded_flag = False
-                # print(idx)
                 for exbox in self.bboxes:
                     if exbox[0] < idx[0] < exbox[1] and exbox[2] < idx[1] < exbox[3]:
                         excluded_flag = True
@@ -272,7 +268,7 @@ class XfmHfiveDataset:
         These images are also reduced (masked by default) for filtering
         :param masked: boolean, if True, mask the 2d image, reduced data is always masked
         :param img_folder: location where 2d npy arrays are stored
-        :param profile_folder: locationw where 1d reduced arrays are stored
+        :param profile_folder: location where 1d reduced arrays are stored
         :return:
         """
         self.mask = np.load(f'{self.apath}{self.tag}_mask.npy')
@@ -284,6 +280,7 @@ class XfmHfiveDataset:
             os.makedirs(red_path)
         print(f'<atomize_reduce_h5> Atomizing to {atom_path}')
         print(f'<atomize_reduce_h5> Reducing to {red_path}')
+        start = time.time()
         with open(f'{atom_path}{self.tag}_manifest.txt', 'w') as f:
             for k, h5 in enumerate(sorted_nicely(self.h5ls)):
                 print(f'<atomize_reduce_h5> Atomizing {h5}...')
@@ -300,7 +297,7 @@ class XfmHfiveDataset:
                         np.save(f'{red_path}{self.tag}_{k}_{shot}_red.npy', profile)
                         np.save(f'{atom_path}{self.tag}_{k}_{shot}.npy', frame)
                         f.write(f'{atom_path}{self.tag}_{k}_{shot}.npy\n')
-        print('<atomize_reduce_h5> ...complete')
+        print(f'<atomize_reduce_h5> ...complete in {time.time() - start} seconds')
         print(f'<atomize_reduce_h5> File manifest written to {atom_path}{self.tag}_manifest.txt')
 
     def frm_integration(self, frame, unit="q_nm^-1", npt=2250):
@@ -319,7 +316,6 @@ class XfmHfiveDataset:
                     pixelY=self.pix_size)
         ai.wavelength = self.wavelength / 1e10
         integrated_profile = ai.integrate1d(data=frame, npt=npt, unit=unit)
-        # print(np.array(integrated_profile).shape)
         return np.transpose(np.array(integrated_profile))
 
     def scatter_shot_inspect(self, dbin_folder='h5_frames', sample_size=10, dump=False):
@@ -402,13 +398,13 @@ class XfmHfiveDataset:
         prf_list = []
         for frm in frm_list:
             # print(f'frm {frm}')
-            prf_list.append(f'{self.apath}{folder}/{frm}_reduced_q_m.npy')
+            prf_list.append(f'{self.apath}{folder}/{frm}_red.npy')
         return prf_list
 
     def calc_subset_average(self, prf_list):
         limit = len(prf_list)
         measure = np.load(prf_list[0])
-        print(measure.shape)
+        print(f'<> measure.shape')
         tau_array = np.zeros((measure.shape[0], limit))
         print(tau_array.shape)
         for k, arr in enumerate(prf_list[:limit]):
@@ -439,7 +435,17 @@ class XfmHfiveDataset:
         # plt.show()
         return r_p
 
-    def make_filtered_manifest(self, filtered_indices, frm_list, line_list, mf_path, even_mf_path, odd_mf_path):
+    def make_filtered_manifest(self, filtered_indices, line_list, mf_path, even_mf_path, odd_mf_path):
+        """
+        Write out filtered manifest files for py3padf using filtered indices. This function can be
+        expanded if some other form of filtering is used
+        :param filtered_indices: List of file indices that pass through some filter
+        :param line_list: list of paths
+        :param mf_path: string, path to manifest file
+        :param even_mf_path: string, path to even manifest file
+        :param odd_mf_path: string, path to odd manifest file
+        :return: passes line list back if required
+        """
         count = 0
         odd_count = 0
         even_count = 0
@@ -463,9 +469,11 @@ class XfmHfiveDataset:
 
     def filter_against_average(self, folder='1d_profiles', limit=10000, rfac_threshold=1.0, itera=0, parent_mf='',
                                inspect=False, qlims=[0, 10]):
+        # First grab the list of 1D profiles
         frm_list, line_list = self.define_parent_manifest(parent_mf)
         prf_list = self.grab_parent_prfs(frm_list, folder)
         filtered_indices = []
+        # Paths to the resulting manifest files. Split into odd/even pairs for easy convergence testing
         mf_path = f'/data/xfm/{self.experiment_id}/analysis/eiger/SAXS/{self.group}/{self.tag}/h5_frames/{self.tag}_average_filter_manifest_{itera}.txt'
         odd_mf_path = f'/data/xfm/{self.experiment_id}/analysis/eiger/SAXS/{self.group}/{self.tag}/h5_frames/{self.tag}_average_filter_manifest_{itera}_odd.txt'
         even_mf_path = f'/data/xfm/{self.experiment_id}/analysis/eiger/SAXS/{self.group}/{self.tag}/h5_frames/{self.tag}_average_filter_manifest_{itera}_even.txt'
@@ -473,16 +481,21 @@ class XfmHfiveDataset:
         print(prf_list[0])
         print(prf_list[-1])
         self.rfactor_array = []
-        prf_num = len(prf_list)
+        # Generate the average of the files in the prf_list.
+        # Note this can also be a different file to the whole average using the itera variable
         subset_ap = self.calc_subset_average(prf_list) + 1.0
+        # Trim the profile to the qlims
         subset_ap = trim_to_qlims(qlims, subset_ap)
-        print(f'len of trimmed subset_ap {subset_ap.shape}')
-        # print(f'len(prf_list) {len(prf_list)}')
-        print(f'len(self.rfactor_array) {len(self.rfactor_array)}')
+        print(f'<fluxfm.filter_against_average> {subset_ap.shape=}')
+        print(f'<fluxfm.filter_against_average>{len(self.rfactor_array)=}')
+        # For each profile, load, trim to the same qrange and calculate the R-factor
         for k, arr in enumerate(prf_list[:limit]):
             prf = np.load(prf_list[k]) + 1.0
             prf = trim_to_qlims(qlims, prf)
             self.rfactor_array.append(self.calc_subset_rfactor(prf, subset_ap))
+        """
+        Set up the figure here
+        """
         plt.figure()
         plt.plot(self.rfactor_array[:])
         plt.show()
@@ -491,8 +504,9 @@ class XfmHfiveDataset:
         plt.xlabel('R factor')
         plt.hist(self.rfactor_array, bins=20, range=(0.0, 0.1))
         plt.show()
-        print(f'<filter_against_average> filtering with limit <= {rfac_threshold}')
-        print(f'len(self.rfactor_array) {len(self.rfactor_array)}')
+        print(f'<fluxfm.filter_against_average> filtering with limit <= {rfac_threshold}')
+        print(f'<fluxfm.filter_against_average> {len(self.rfactor_array)=}')
+        # Now filter against the R-factor limit
         for k, rfac in enumerate(self.rfactor_array):
             if rfac <= rfac_threshold:
                 filtered_indices.append(k)
@@ -566,14 +580,15 @@ class XfmHfiveDataset:
                 print(f'<fluxfm.quick_overview> {self.run_data_array.shape}')
         self.run_data_sum = np.sum(self.run_data_array, 0)
         self.run_data_avg = np.average(self.run_data_array, axis=0)
+        diff_data, diff_data_avg = self.calculate_difference_array(self.run_data_array)
         print(f'<fluxfm.quick_overview> Writing overview sum to:{self.scratch}{self.tag}_sum_reduced_q.npy')
         np.save(self.scratch + self.tag + '_sum.npy', self.run_data_sum)
         np.save(f'{self.apath}{self.tag}_sum_red.npy', self.frm_integration(self.run_data_sum * self.mask, npt=2250))
         print(f'<fluxfm.quick_overview> Writing overview mean to:{self.scratch}{self.tag}_avg_reduced_q.npy')
         np.save(self.scratch + self.tag + '_avg.npy', self.run_data_avg)
         np.save(f'{self.apath}{self.tag}_avg_red.npy', self.frm_integration(self.run_data_avg * self.mask, npt=2250))
-        print(f'median dsum {np.median(self.run_data_sum)}')
-        print(f'media avg {np.median(self.run_data_avg)}')
+        np.save(f'{self.apath}{self.tag}_avg_red_diff.npy',
+                self.frm_integration(np.abs(diff_data_avg) * self.mask, npt=2250))
         if show:
             plt.figure(f'{self.tag} Masked sum')
             plt.imshow(self.run_data_sum * self.mask)
@@ -582,6 +597,16 @@ class XfmHfiveDataset:
             plt.imshow(self.run_data_avg * self.mask)
             plt.clim(0.0, np.median(self.run_data_avg) * 3)
             plt.show()
+
+    def calculate_difference_array(self, run_data_array):
+        output_array = run_data_array * 0.0
+        for i in np.arange(run_data_array.shape[0]):
+            m = int(np.random.rand() * run_data_array.shape[0])
+            if m>= run_data_array.shape[0]: m = run_data_array.shape[0] - 1
+            output_array[i, :, :] = run_data_array[i, :, :] - run_data_array[m, :, :]
+
+        return output_array, np.average(output_array, axis=0)
+
 
     def run_movie(self, run_id=0, step=100, cmin=0, cmax=1000):
         print(self.h5ls[0])

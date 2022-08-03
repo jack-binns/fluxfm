@@ -1,0 +1,32 @@
+[FLUXFM_CONFIG]
+#
+# Config file for fluxfm
+# XFM experiment 17635
+
+
+# Detector
+# Pixel numbers for EIGER detector
+eiger_nx = 1062
+eiger_ny = 1028
+# Hot pixel value
+max_px_count = 4.29E9
+
+# Experiment geometry
+# Detector-to-sample distance in meters
+cam_length = 0.1512
+# Incident X-ray wavelength in meters
+wavelength = 0.67018E-10
+# Pixel size in meters
+pix_size = 75E-6
+
+# Data path variables
+# Experiment ID
+experiment_id = 17635
+# Starting value for the MAIA detector
+#maia_num = 86207
+maia_num = 99075
+# beamtime_data_path = f'/data/xfm/{experiment_id}/raw/eiger/'
+# beamtime_analysis_path = f'/data/xfm/{experiment_id}/analysis/eiger/SAXS/'
+
+experiment_data_path = C:\\python\\fluxfm\\scr\\
+experiment_analysis_path = C:\\python\\fluxfm\\scr\\

@@ -5,8 +5,8 @@ if __name__ == '__main__':
     dset = fluxfm.XfmHfiveDataset(configpath=f'C:\\python\\fluxfm\\scr\\17635_config.txt')
 
     # Here you select the group and run for the data set
-    dset.group = 'ctab50h2o50'
-    run_num = 216
+    dset.group = 'tlc'
+    run_num = 326
 
     image_center = (514.425, 530.777)
 
@@ -42,6 +42,11 @@ if __name__ == '__main__':
     Inspect the data
     """
     dset.show_overview_figures()
+
+    """
+    Filtering against average
+    """
+    dset.filter_against_average(rfac_threshold=0.05,qlims=[2e7,2.5e8])
 
     #
     # """

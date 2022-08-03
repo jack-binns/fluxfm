@@ -404,18 +404,19 @@ class XfmHfiveDataset:
     def calc_subset_average(self, prf_list):
         limit = len(prf_list)
         measure = np.load(prf_list[0])
-        print(f'<> measure.shape')
+        print(f'<fluxfm.calc_subset_average> profile array shape: {measure.shape}')
         tau_array = np.zeros((measure.shape[0], limit))
-        print(tau_array.shape)
+        print(f'<fluxfm.calc_subset_average> average array shape: {tau_array.shape}')
         for k, arr in enumerate(prf_list[:limit]):
             prf = np.load(prf_list[k])
             tau_array[:, k] = prf[:, 1]
         average_tau = np.average(tau_array, axis=1)
-        print(average_tau.shape)
         subset_ap = np.column_stack((prf[:, 0], average_tau[:]))
         plt.figure()
         plt.title('subset average')
         plt.plot(subset_ap[:, 0], subset_ap[:, 1])
+        plt.xlabel('q')
+        plt.ylabel('intensity')
         plt.show()
         return subset_ap
 
@@ -468,7 +469,7 @@ class XfmHfiveDataset:
         return line_list
 
     def filter_against_average(self, folder='1d_profiles', limit=10000, rfac_threshold=1.0, itera=0, parent_mf='',
-                               inspect=False, qlims=[0, 10]):
+                               inspect=False, qlims=(1e7, 1e8)):
         # First grab the list of 1D profiles
         frm_list, line_list = self.define_parent_manifest(parent_mf)
         prf_list = self.grab_parent_prfs(frm_list, folder)
@@ -483,11 +484,14 @@ class XfmHfiveDataset:
         self.rfactor_array = []
         # Generate the average of the files in the prf_list.
         # Note this can also be a different file to the whole average using the itera variable
-        subset_ap = self.calc_subset_average(prf_list) + 1.0
+        subset_ap = self.calc_subset_average(prf_list)
         # Trim the profile to the qlims
         subset_ap = trim_to_qlims(qlims, subset_ap)
-        print(f'<fluxfm.filter_against_average> {subset_ap.shape=}')
-        print(f'<fluxfm.filter_against_average>{len(self.rfactor_array)=}')
+        print(f'<fluxfm.filter_against_average> {subset_ap.shape}')
+        if subset_ap.shape[0] == 0:
+            print(f'WARNING:: qlims range outside integrated pattern range. Check qlims are in m (typical range 1e7 : '
+                  f'1e8)')
+        print(f'<fluxfm.filter_against_average>{len(self.rfactor_array)}')
         # For each profile, load, trim to the same qrange and calculate the R-factor
         for k, arr in enumerate(prf_list[:limit]):
             prf = np.load(prf_list[k]) + 1.0
@@ -505,7 +509,7 @@ class XfmHfiveDataset:
         plt.hist(self.rfactor_array, bins=20, range=(0.0, 0.1))
         plt.show()
         print(f'<fluxfm.filter_against_average> filtering with limit <= {rfac_threshold}')
-        print(f'<fluxfm.filter_against_average> {len(self.rfactor_array)=}')
+        print(f'<fluxfm.filter_against_average> filtering total of {len(self.rfactor_array)} profiles')
         # Now filter against the R-factor limit
         for k, rfac in enumerate(self.rfactor_array):
             if rfac <= rfac_threshold:

@@ -46,7 +46,7 @@ if __name__ == '__main__':
     """
     Filtering against average
     """
-    dset.filter_against_average(rfac_threshold=0.05,qlims=[2e7,2.5e8])
+    dset.filter_against_average(rfac_threshold=0.05,qlims=(2e7,2.5e8))
 
     #
     # """

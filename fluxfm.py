@@ -309,12 +309,12 @@ class XfmHfiveDataset:
         :return: two-col array of q & intensity.
         """
         ai = AzimuthalIntegrator()
-        ai.setFit2D(directDist=self.cam_length,
+        ai.setFit2D(directDist=self.cam_length / 1000,
                     centerX=self.image_center[0],
                     centerY=self.image_center[1],
                     pixelX=self.pix_size,
                     pixelY=self.pix_size)
-        ai.wavelength = self.wavelength / 1e10
+        ai.wavelength = self.wavelength
         integrated_profile = ai.integrate1d(data=frame, npt=npt, unit=unit)
         return np.transpose(np.array(integrated_profile))
 
